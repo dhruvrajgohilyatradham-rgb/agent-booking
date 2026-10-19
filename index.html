@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Agent Booking by Hour</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1b1f27;--mut:#6b7280;--bd:#e3e6eb;--ac:#2563eb;--ok:#16a34a;--hd:#eef2f7;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12151a;--card:#1b2028;--tx:#e8ebf0;--mut:#9aa3b2;--bd:#2c3340;--ac:#60a5fa;--ok:#4ade80;--hd:#232a35;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#12151a;--card:#1b2028;--tx:#e8ebf0;--mut:#9aa3b2;--bd:#2c3340;--ac:#60a5fa;--ok:#4ade80;--hd:#232a35;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.w{max-width:960px;margin:0 auto;padding:20px 14px 40px}
+h1{font-size:20px;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 16px;font-size:13px}
+.up{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.box{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px}
+.box b{display:block;margin-bottom:6px}.box small{color:var(--mut);display:block;margin-top:6px;min-height:18px}
+input[type=file]{width:100%;font-size:13px}
+button{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:14px;cursor:pointer}
+button.s{background:var(--hd);color:var(--tx);border:1px solid var(--bd)}
+.bar{display:flex;gap:8px;margin:14px 0;flex-wrap:wrap}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:14px 0}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px 12px}
+.c span{color:var(--mut);font-size:12px;display:block}.c strong{font-size:20px}
+.sc{overflow-x:auto;background:var(--card);border:1px solid var(--bd);border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:640px}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--bd);white-space:nowrap}
+th{background:var(--hd);font-size:12px}th:first-child,td:first-child{text-align:left}
+tr.t td{font-weight:700;background:var(--hd)}.ag{color:var(--ok);font-weight:600}
+.err{color:#dc2626;margin:8px 0}
+</style>
+</head>
+<body>
+<div class="w">
+<h1>Agent Booking by Hour</h1>
+<p class="sub">Files are processed only in your browser; nothing is uploaded anywhere.</p>
+<div class="up">
+<div class="box"><b>1. Incoming CSV</b><input type="file" id="fin" accept=".csv"><small id="sin">Needs “Client Number”</small></div>
+<div class="box"><b>2. Outgoing CSV</b><input type="file" id="fout" accept=".csv"><small id="sout">Needs “Client Number”</small></div>
+<div class="box"><b>3. Order CSV</b><input type="file" id="ford" accept=".csv"><small id="sord">Needs Telephoneno, Booked On, Total, Status, Booking ID</small></div>
+</div>
+<div class="bar"><button id="go">Generate report</button><button class="s" id="cp" style="display:none">Copy table</button></div>
+<div id="err" class="err"></div>
+<div id="out"></div>
+</div>
+<script>
+const S={in:null,out:null,ord:null};
+function parseCSV(t){
+  t=t.replace(/^\uFEFF/,'');const rows=[];let r=[],f='',q=false;
+  for(let i=0;i<t.length;i++){const c=t[i];
+    if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c==='"')q=true;
+    else if(c===','){r.push(f);f=''}
+    else if(c==='\n'||c==='\r'){if(c==='\r'&&t[i+1]==='\n')i++;r.push(f);f='';if(r.some(x=>x!==''))rows.push(r);r=[]}
+    else f+=c}
+  if(f!==''||r.length){r.push(f);rows.push(r)}
+  return rows}
+function toObjs(rows){
+  const h=rows[0].map(x=>x.trim().toLowerCase());
+  return {h,data:rows.slice(1)}}
+function col(h,name){return h.indexOf(name.toLowerCase())}
+function cleanNum(v){
+  const d=String(v||'').replace(/\D/g,'');
+  return d.length>=10?d.slice(-10):''}
+function hookFile(id,key,sid,need){
+  document.getElementById(id).addEventListener('change',e=>{
+    const f=e.target.files[0];if(!f)return;
+    const rd=new FileReader();
+    rd.onload=()=>{S[key]=toObjs(parseCSV(rd.result));
+      const miss=need.filter(n=>col(S[key].h,n)<0);
+      document.getElementById(sid).textContent=miss.length?'Missing column: '+miss.join(', '):f.name+' · '+S[key].data.length+' rows';};
+    rd.readAsText(f)})}
+hookFile('fin','in','sin',['Client Number']);
+hookFile('fout','out','sout',['Client Number']);
+hookFile('ford','ord','sord',['Telephoneno','Booked On','Total','Status']);
+function numSet(o){
+  const s=new Set();if(!o)return s;
+  const i=col(o.h,'client number');if(i<0)return s;
+  o.data.forEach(r=>{const n=cleanNum(r[i]);if(n)s.add(n)});return s}
+function bad(st){
+  const n=String(st||'').toLowerCase().replace(/[^a-z]/g,'');
+  return n==='pending'||n==='pendingpayment'||n==='bookingchanged'||(n.includes('pending')&&n.includes('follo'))}
+function hourOf(v){
+  const m=String(v||'').match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?/);
+  if(!m)return null;let h=+m[1];const ap=m[3];
+  if(ap){const p=ap.toLowerCase()==='pm';if(p&&h<12)h+=12;if(!p&&h===12)h=0}
+  return h>=0&&h<24?h:null}
+function lbl(h){const e=(h+1)%24;const f=x=>String(x).padStart(2,'0')+':00';return f(h)+' – '+f(e)}
+const fmt=n=>Math.round(n).toLocaleString('en-IN');
+document.getElementById('go').onclick=()=>{
+  const err=document.getElementById('err');err.textContent='';
+  if(!S.ord){err.textContent='Please upload the Order CSV.';return}
+  if(!S.in&&!S.out){err.textContent='Please upload at least the Incoming or Outgoing CSV.';return}
+  const o=S.ord,iT=col(o.h,'telephoneno'),iB=col(o.h,'booked on'),iM=col(o.h,'total'),iS=col(o.h,'status');
+  if([iT,iB,iM,iS].some(x=>x<0)){err.textContent='Order CSV must have Telephoneno, Booked On, Total and Status columns.';return}
+  const inS=numSet(S.in),outS=numSet(S.out);
+  const H={};let removed=0,nohour=0,dupId=0;const iI=col(o.h,'booking id'),seenId=new Set();
+  o.data.forEach(r=>{
+    if(bad(r[iS])){removed++;return}
+    const h=hourOf(r[iB]);if(h===null){nohour++;return}
+    const id=iI>=0?String(r[iI]||'').trim():'';
+    if(id){if(seenId.has(id)){dupId++;return}seenId.add(id)}
+    const amt=parseFloat(String(r[iM]||'').replace(/[^0-9.\-]/g,''))||0;
+    const n=cleanNum(r[iT]);const a=inS.has(n),b=outS.has(n);
+    const x=H[h]||(H[h]={t:0,ta:0,ag:0,aa:0,i:0,o:0});
+    x.t++;x.ta+=amt;
+    if(n&&(a||b)){x.ag++;x.aa+=amt;if(a)x.i++;if(b)x.o++}});
+  const hs=Object.keys(H).map(Number).sort((a,b)=>a-b);
+  const T=hs.reduce((s,h)=>{const x=H[h];for(const k in x)s[k]=(s[k]||0)+x[k];return s},{t:0,ta:0,ag:0,aa:0,i:0,o:0});
+  const pc=(a,b)=>b?(a/b*100).toFixed(1)+'%':'0%';
+  let html=`<div class="cards">
+  <div class="c"><span>Total bookings</span><strong>${fmt(T.t)}</strong></div>
+  <div class="c"><span>Agent bookings</span><strong>${fmt(T.ag)}</strong></div>
+  <div class="c"><span>Agent share</span><strong>${pc(T.ag,T.t)}</strong></div>
+  <div class="c"><span>Agent amount</span><strong>₹${fmt(T.aa)}</strong></div>
+  <div class="c"><span>Removed (not done)</span><strong>${fmt(removed)}</strong></div>
+  <div class="c"><span>Unique incoming numbers</span><strong>${fmt(inS.size)}</strong></div>
+  <div class="c"><span>Unique outgoing numbers</span><strong>${fmt(outS.size)}</strong></div>
+  <div class="c"><span>Duplicate Booking ID removed</span><strong>${fmt(dupId)}</strong></div></div>
+  <div class="sc"><table id="tb"><thead><tr><th>Hour</th><th>Total Bookings</th><th>Total Amount</th><th>Agent Bookings</th><th>Agent Amount</th><th>Agent %</th><th>Non-Agent</th><th>Via Incoming</th><th>Via Outgoing</th></tr></thead><tbody>`;
+  const row=(l,x,c)=>`<tr${c?' class="t"':''}><td>${l}</td><td>${x.t}</td><td>${fmt(x.ta)}</td><td class="ag">${x.ag}</td><td>${fmt(x.aa)}</td><td>${pc(x.ag,x.t)}</td><td>${x.t-x.ag}</td><td>${x.i}</td><td>${x.o}</td></tr>`;
+  hs.forEach(h=>html+=row(lbl(h),H[h]));
+  html+=row('Total',T,1)+'</tbody></table></div>';
+  if(nohour)html+=`<p class="sub">${nohour} order rows skipped (no readable time in Booked On).</p>`;
+  document.getElementById('out').innerHTML=html;
+  document.getElementById('cp').style.display='inline-block'};
+document.getElementById('cp').onclick=async()=>{
+  const tb=document.getElementById('tb');if(!tb)return;
+  const txt=[...tb.rows].map(r=>[...r.cells].map(c=>c.textContent).join('\t')).join('\n');
+  try{await navigator.clipboard.writeText(txt);document.getElementById('cp').textContent='Copied ✓'}
+  catch(e){document.getElementById('cp').textContent='Copy blocked'}
+  setTimeout(()=>document.getElementById('cp').textContent='Copy table',1500)};
+</script>
+</body>
+</html>
